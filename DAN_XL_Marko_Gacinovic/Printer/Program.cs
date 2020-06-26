@@ -7,12 +7,14 @@ namespace Printer
 {
     class Program
     {        
-        static readonly AutoResetEvent auto = new AutoResetEvent(true);
-        static readonly AutoResetEvent auto2 = new AutoResetEvent(true);
-
+        static readonly object locker = new object();        
+       
         static string[] formats = new string[] { "A3", "A4" };
         static string[] orientations = new string[] { "Portrait", "Landscape" };
+        static string[] fileColors = File.ReadAllLines("../../Colors.txt");
 
+        static List<string> users = new List<string>(10);
+        
         static Random rnd = new Random();               
 
         static void Main(string[] args)
@@ -21,13 +23,12 @@ namespace Printer
 
             for (int i = 0; i < 10; i++)
             {
-                Thread computer = new Thread(() => Print(formats[rnd.Next(2)], orientations[rnd.Next(2)]));
+                Thread computer = new Thread(() => Print(Thread.CurrentThread.Name));
 
                 computer.Name = "Computer_" + (i + 1);
 
-                computer.Start();
-                Thread.Sleep(100);
-            }
+                computer.Start();                
+            }            
 
             Console.ReadLine();
         }
@@ -52,58 +53,69 @@ namespace Printer
             }
         }
 
-        static void Print(string format, string orientation)
-        {
-            string color = null;
-            
-
-            if (format == "A3")
+        static void Print(string name)
+        { 
+            while (users.Count < 10)
             {
-                auto.WaitOne();                
-
-                try
+                if (users.Count == 10)
                 {
-                    string[] fileColors = File.ReadAllLines("../../Colors.txt");
-
-                    color = fileColors[rnd.Next(fileColors.Length)];
+                    return;
                 }
-                catch (Exception e)
+               
+                Thread.Sleep(100);
+
+                string color = fileColors[rnd.Next(fileColors.Length)];
+                string format = formats[rnd.Next(2)];
+                string orientation = orientations[rnd.Next(2)];
+
+                Console.WriteLine("{0} send the request for printing document {1} format. Color: {2}. Orientation: {3}", name, format, color, orientation);
+
+                Thread request = new Thread(() => Request(name, color, format, orientation));
+                request.Start();                                
+            }
+        }
+
+        static void Request(string threadName, string color, string format, string orientation)
+        {
+            if (format == "A3")
+            {                
+                lock (locker)
                 {
-                    Console.WriteLine(e.Message);
+                    if (users.Count == 10)
+                    {
+                        return;
+                    }
+                    Thread.Sleep(1000);
+
+                    Console.WriteLine("\nDocument -> format: {0}, color: {1}, orientation: {2} is printed.", format, color, orientation);
+                    Console.WriteLine("User of {0} can take over document {1} format.\n", threadName, format);
+
+                    
+                    if (!users.Contains(threadName))
+                    {
+                        users.Add(threadName);
+                    }
                 }
-
-                Console.WriteLine("{0} send the request for printing document {1} format. Color: {2}. Orientation: {3}", Thread.CurrentThread.Name, format, color, orientation);
-
-                Thread.Sleep(1000);
-
-                Console.WriteLine("Document -> format: {0}, color: {1}, orientation: {2} is printed.", format, color, orientation);
-                Console.WriteLine("\nUser of {0} can take over document {1} format.\n", Thread.CurrentThread.Name, format);
-
-                auto.Set();
             }
             else
-            {
-                auto2.WaitOne();
-
-                try
+            {                
+                lock (locker)
                 {
-                    string[] fileColors = File.ReadAllLines("../../Colors.txt");
+                    if (users.Count == 10)
+                    {
+                        return;
+                    }
+                    Thread.Sleep(1000);
 
-                    color = fileColors[rnd.Next(fileColors.Length)];
+                    Console.WriteLine("\nDocument -> format: {0}, color: {1}, orientation: {2} is printed.", format, color, orientation);
+                    Console.WriteLine("User of {0} can take over document {1} format.\n", threadName, format);
+
+                    
+                    if (!users.Contains(threadName))
+                    {
+                        users.Add(threadName);
+                    }
                 }
-                catch (Exception e)
-                {
-                    Console.WriteLine(e.Message);
-                }
-
-                Console.WriteLine("{0} send the request for printing document {1} format. Color: {2}. Orientation: {3}", Thread.CurrentThread.Name, format, color, orientation);
-
-                Thread.Sleep(1000);
-
-                Console.WriteLine("Document -> format: {0}, color: {1}, orientation: {2} is printed.", format, color, orientation);
-                Console.WriteLine("\nUser of {0} can take over document {1} format.\n", Thread.CurrentThread.Name, format);
-
-                auto2.Set();
             }            
         }
     }
